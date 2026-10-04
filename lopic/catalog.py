@@ -15,6 +15,14 @@ TORCH_CU124 = "https://download.pytorch.org/whl/cu124"
 TORCH_CU128 = "https://download.pytorch.org/whl/cu128"
 TORCH_CU130 = "https://download.pytorch.org/whl/cu130"
 
+# Why a generator is pinned to a python minor. forge and a1111 hard-abort on any
+# other minor on windows (launch_utils.check_python_version: supported_minors=[10]),
+# fooocus skips xformers outside 3.10 and then exits, killing the install.
+PY_PIN_NOTE = {
+    "3.10": "nur 3.10 &mdash; Forge bricht auf Windows mit jedem anderen Minor-Release ab.",
+    "3.12": "3.12 wie von InvokeAI vorgegeben (<code>pyproject.toml</code>: <code>&gt;=3.12, &lt;3.13</code>).",
+}
+
 CATALOG: list[dict[str, Any]] = [
     {
         "id": "comfyui",
@@ -86,7 +94,7 @@ CATALOG: list[dict[str, Any]] = [
         ],
         "steps": [
             "<b>Quelle holen</b> — Git-Repo wird nach <code>LopicEngines/stable-diffusion-webui-forge</code> geklont.",
-            "<b>Eigene Umgebung</b> — eigenes venv mit Python 3.10. Forge bricht auf Windows mit jedem anderen Minor-Release ab.",
+            "<b>Eigene Umgebung</b> — eigenes venv mit Python 3.10.",
             "<b>CUDA-Torch</b> — Torch + torchvision für deine RTX 4060.",
             "<b>Abhaengigkeiten</b> — <code>requirements_versions.txt</code> wird installiert.",
         ],
@@ -123,7 +131,7 @@ CATALOG: list[dict[str, Any]] = [
         ],
         "steps": [
             "<b>Quelle holen</b> — Git-Repo wird nach <code>LopicEngines/Fooocus</code> geklont.",
-            "<b>Eigene Umgebung</b> — eigenes venv mit Python 3.10; mit anderen Versionen bricht Fooocus die Installation ab.",
+            "<b>Eigene Umgebung</b> — eigenes venv mit Python 3.10.",
             "<b>CUDA-Torch</b> — Torch + torchvision für deine RTX 4060.",
             "<b>Abhaengigkeiten + Modelle</b> — Pakete und ca. 6 GB Startmodelle werden geladen.",
         ],
@@ -159,7 +167,7 @@ CATALOG: list[dict[str, Any]] = [
         ],
         "steps": [
             "<b>Quelle holen</b> — Git-Repo wird nach <code>LopicEngines/stable-diffusion-webui</code> geklont.",
-            "<b>Eigene Umgebung</b> — eigenes venv mit Python 3.10; neuere Versionen werden abgelehnt.",
+            "<b>Eigene Umgebung</b> — eigenes venv mit Python 3.10.",
             "<b>CUDA-Torch</b> — Torch + torchvision (aelteres CUDA-Index fuer Kompatibilitaet).",
             "<b>Abhaengigkeiten</b> — <code>requirements_versions.txt</code> wird installiert.",
         ],

@@ -237,6 +237,7 @@ function renderDetail(id) {
           <div class="spec"><span class="k">Quelle</span><span class="v">${g.repo.split('/').pop().replace('.git', '')}</span></div>
           <div class="spec"><span class="k">Ordner</span><span class="v">${g.folder}</span></div>
         </div>
+        ${g.py_note ? `<p class="py-note">${g.py_note}</p>` : ''}
       </div>
 
       <div class="d-sec">

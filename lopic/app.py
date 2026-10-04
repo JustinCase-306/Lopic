@@ -9,7 +9,7 @@ from pathlib import Path
 
 import webview
 
-from .catalog import CATALOG, by_id
+from .catalog import CATALOG, PY_PIN_NOTE, by_id
 from .install import Installer
 from .settings import load_config, save_config
 from .system import system_report
@@ -58,6 +58,7 @@ class LopicApi:
         for gen in CATALOG:
             row = {k: v for k, v in gen.items() if k != "torch_index"}
             row["installed"] = installed.get(gen["id"], False)
+            row["py_note"] = PY_PIN_NOTE.get(gen["python"], "")
             out.append(row)
         return out
 
