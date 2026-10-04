@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lopic</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="aurora" aria-hidden="true">
+  <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true"></div>
+    <div class="brandtext">
+      <h1>Lopic</h1>
+      <p>Lokale Bildgeneratoren — alles auf deinem PC</p>
+    </div>
+  </div>
+  <div class="sysbar" id="sysbar" title="System-Erkennung">
+    <div class="sysitem"><span class="lbl">GPU</span><span class="val" id="sys-gpu">–</span></div>
+    <div class="sysitem"><span class="lbl">VRAM</span><span class="val" id="sys-vram">–</span></div>
+    <div class="sysitem"><span class="lbl">Speicher frei</span><span class="val" id="sys-disk">–</span></div>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="catalog">
+    <div class="catalog-head">
+      <h2>Bildgeneratoren</h2>
+      <span class="count" id="cat-count">–</span>
+      <div class="filters" id="filters">
+        <button class="chip active" data-filter="all">Alle</button>
+        <button class="chip" data-filter="fits">Passt auf meine GPU</button>
+        <button class="chip" data-filter="installed">Installiert</button>
+        <button class="chip" data-filter="easy">Einsteiger</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <aside class="detail" id="detail">
+    <div class="detail-inner" id="detail-inner">
+      <div class="empty-detail">
+        <div class="empty-icon" aria-hidden="true"></div>
+        <h3>Wähle einen Generator</h3>
+        <p>Klick links auf eine Karte, um Beschreibung, Anforderungen und Installationsschritte zu sehen.</p>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

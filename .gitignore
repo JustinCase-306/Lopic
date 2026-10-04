@@ -1,0 +1,25 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# build
+build/
+dist/
+*.exe
+
+# local engines are configured per user, never in the repo
+LopicEngines/
+
+# editors / os
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+
+# stray temp artifacts
+*.tmp
