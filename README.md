@@ -19,17 +19,21 @@ CUDA-Torch-Version und startet sie fensterlos im Hintergrund.
 
 ## Die sechs Generatoren
 
-| Generator | Wofür | VRAM | Start |
-|---|---|---|---|
-| **ComfyUI** | Node-basierte Pipeline-Engine, mächtigste und sparsamste Option | 4 GB | `main.py` |
-| **Forge** | Nachfolger von A1111, gleiche Oberfläche, schneller und sparsamer | 4 GB | `launch.py` |
-| **Fooocus** | Nur Prompt eingeben, fertiges Bild — der einfachste Einstieg | 4 GB | `launch.py` |
-| **AUTOMATIC1111** | Das Original mit dem größten Erweiterungs-Ökosystem | 6 GB | `launch.py` |
-| **InvokeAI** | Schonste Oberfläche mit Canvas und Bildbearbeitung | 6 GB | `invokeai-web` |
-| **SD.Next** | Bild-, Video- und 3D-Generierung in einem Tool, sehr aktiv gepflegt | 6 GB | `launch.py` |
+| Generator | Wofür | Python | VRAM | Start |
+|---|---|---|---|---|
+| **ComfyUI** | Node-basierte Pipeline-Engine, mächtigste und sparsamste Option | 3.12 | 4 GB | `main.py` |
+| **Forge** | Nachfolger von A1111, gleiche Oberfläche, schneller und sparsamer | 3.10 | 4 GB | `launch.py` |
+| **Fooocus** | Nur Prompt eingeben, fertiges Bild — der einfachste Einstieg | 3.10 | 4 GB | `launch.py` |
+| **AUTOMATIC1111** | Das Original mit dem größten Erweiterungs-Ökosystem | 3.10 | 6 GB | `launch.py` |
+| **InvokeAI** | Schonste Oberfläche mit Canvas und Bildbearbeitung | 3.12 | 6 GB | `invokeai-web` |
+| **SD.Next** | Bild-, Video- und 3D-Generierung in einem Tool, sehr aktiv gepflegt | 3.12 | 6 GB | `launch.py` |
 
-Alle Angaben zu Quellcode, Startdatei und `requirements`-Dateinamen sind gegen die
-tatsächlichen Repositories geprüft, nicht geraten.
+Alle Angaben zu Quellcode, Startdatei, `requirements`-Dateinamen **und Python-Version**
+sind gegen die tatsächlichen Repositories geprüft, nicht geraten. Das ist nicht
+kosmetisch: Forge, Fooocus und A1111 lehnen auf Windows jedes andere Python-Minor-Release
+ab — Forge und A1111 brechen mit `INCOMPATIBLE PYTHON VERSION` ab, Fooocus beendet die
+Installation mit `exit(0)`. Lopic legt darum für jeden Generator ein eigenes venv in der
+jeweils gepinnten Version an.
 
 ## Installation
 
