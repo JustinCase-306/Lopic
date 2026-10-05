@@ -18,7 +18,7 @@ from typing import Callable
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 # install phases, used for the progress fraction
-TOTAL_PHASES = 4
+TOTAL_PHASES = 5
 
 
 @dataclass
@@ -72,16 +72,27 @@ class Installer:
 
     # ---------- process helpers ----------
 
-    def _run(self, job: Job, cmd: list[str], cwd: Path, label: str) -> bool:
-        """run a command, streaming merged output. True on exit code 0."""
-        self.log(f">>> {label}")
-        run_env = dict(os.environ)
-        run_env["PYTHONUNBUFFERED"] = "1"
-        run_env.pop("PYTHONPATH", None)
+    @staticmethod
+    def _run_env() -> dict[str, str]:
+        """isolated env: never inherit lopic's own PYTHONPATH into the engine."""
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+        env.pop("PYTHONPATH", None)
+        return env
 
+    @staticmethod
+    def _flags() -> int:
+        """keep every child invisible: no console window, own process group."""
         flags = CREATE_NO_WINDOW
         if os.name == "nt":
             flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        return flags
+
+    def _run(self, job: Job, cmd: list[str], cwd: Path, label: str) -> bool:
+        """run a command, streaming merged output. True on exit code 0."""
+        self.log(f">>> {label}")
+        run_env = self._run_env()
+        flags = self._flags()
 
         try:
             proc = subprocess.Popen(
@@ -203,6 +214,16 @@ class Installer:
                 raise RuntimeError("Abhaengigkeiten nicht installierbar")
             self._phase(job, 4)
 
+            # -- phase 5: the environment has to actually import --
+            # pip reports "successfully installed" even when a major downgrade
+            # leaves the previous version's shared files behind: forge pins
+            # numpy==1.26.2, which uninstalls the 2.x that torchvision pulled in,
+            # and numpy then fails on a missing _core._multiarray_umath.
+            self._phase(job, 5)
+            healthy = self._verify_env(job, gen, target, py)
+            if not healthy:
+                raise RuntimeError("Installation liess sich nicht importieren")
+
             with job.lock:
                 job.status = "done"
                 job.installed = True
@@ -220,6 +241,44 @@ class Installer:
         finally:
             with self._lock:
                 self.current = None
+
+    def _verify_env(self, job: Job, gen: dict, target: Path, py: str) -> bool:
+        """confirm the venv imports, and repair a broken dependency set.
+
+        pip can end a run with a half-uninstalled package: forge pins
+        numpy==1.26.2, torchvision pulls numpy 2.x first, and the downgrade
+        leaves numpy unable to import. re-running the requirements install
+        puts the pinned files back, so one retry repairs the environment.
+        """
+        probe = ("import numpy, torch; "
+                 "print('torch', torch.__version__, '| cuda', torch.version.cuda, "
+                 "'| gpu', torch.cuda.is_available())")
+        for attempt in (1, 2):
+            r = self._capture([py, "-c", probe], target, timeout=600)
+            if r.returncode == 0:
+                out = (r.stdout or "").strip().splitlines()
+                version = out[-1] if out else "?"
+                self.log(f">>> {gen['name']}: torch {version}")
+                if attempt > 1:
+                    self.log(f"OK {gen['name']}: Umgebung repariert")
+                return True
+            tail = (r.stderr or r.stdout or "").strip().splitlines()[-3:]
+            self.log(f">>> {gen['name']}: Importpruefung fehlgeschlagen "
+                     f"({'; '.join(tail)[:180]})")
+            if attempt == 1:
+                self.log(f">>> {gen['name']}: Abhaengigkeiten neu installieren")
+                self._install_deps(job, gen, target, py)
+        self.log(f"FEHLER {gen['name']}: Umgebung bleibt unbrauchbar")
+        return False
+
+    def _capture(self, cmd: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess:
+        """run a command and capture output instead of streaming it to the log."""
+        try:
+            return subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True,
+                                  timeout=timeout, creationflags=self._flags(),
+                                  env=self._run_env())
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(cmd, 1, "", "timeout")
 
     def _install_deps(self, job: Job, gen: dict, target: Path, py: str) -> bool:
         """install either a requirements file or a pip package.
