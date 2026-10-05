@@ -277,7 +277,9 @@ function renderDetail(id) {
         </ol>
       </div>
 
-      ${busy ? `<div class="d-sec"><h4>Live-Log</h4><div class="log" id="logbox"></div></div>` : ''}
+      ${busy || state.logLines.length
+        ? `<div class="d-sec"><h4>Live-Log</h4><div class="log" id="logbox"></div></div>`
+        : ''}
 
       <div class="actions">
         ${g.installed
@@ -312,7 +314,25 @@ function logHtml(line) {
 function appendLog(line) {
   state.logLines.push(line);
   if (state.logLines.length > 400) state.logLines = state.logLines.slice(-300);
-  const box = $('logbox');
+  let box = $('logbox');
+  if (!box) {
+    // the panel used to render the log section only while an install job ran,
+    // so starting an engine produced no visible reaction at all and the button
+    // looked dead. paint the panel that owns the log; that paint already wrote
+    // every buffered line, this one included, so do not append it again.
+    if (state.selected) renderDetail(state.selected);
+    else if (state.selectedModel) renderModelDetail(state.selectedModel);
+    box = $('logbox');
+    if (box) {
+      // the log is the last section, so bring it into view: otherwise the
+      // reaction to the click lands below the fold and still looks like nothing
+      // happened, which is the whole point of showing it.
+      const panel = $('detail-inner');
+      if (panel) panel.scrollTop = panel.scrollHeight;
+      box.scrollTop = box.scrollHeight;
+      return;
+    }
+  }
   if (box) {
     box.insertAdjacentHTML('beforeend', logHtml(line));
     while (box.children.length > 160) box.removeChild(box.firstChild);
@@ -461,7 +481,9 @@ function renderModelDetail(id) {
         </div>
       </div>
 
-      ${busy ? `<div class="d-sec"><h4>Live-Log</h4><div class="log" id="logbox"></div></div>` : ''}
+      ${busy || state.logLines.length
+        ? `<div class="d-sec"><h4>Live-Log</h4><div class="log" id="logbox"></div></div>`
+        : ''}
 
       <div class="actions">
         ${m.gated
