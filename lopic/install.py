@@ -312,26 +312,20 @@ class Installer:
                 return False
         return True
 
-    def _pinned_packages(self, gen: dict, target: Path) -> list[str]:
-        """read the strict pins from the generator's requirements file.
+    @staticmethod
+    def _pinned_packages(gen: dict, target: Path) -> list[str]:
+        """read the engine's strict pins from its requirements file.
 
-        only strict `==` pins, and only ones torch would otherwise override
-        (numpy is the case that matters). a bare package name is skipped: there
-        is nothing to pre-install.
+        only `==` pins, and only the ones torch would otherwise override.
+        a bare name or a range is skipped: there is nothing to pre-install.
         """
         req = target / (gen.get("requirements") or "")
         if not req.is_file():
             return []
-        names = ("numpy",)
-        pins: list[str] = []
-        for line in req.read_text("utf-8", errors="replace").splitlines():
-            line = line.split("#", 1)[0].strip()
-            if "==" not in line:
-                continue
-            name = line.split("==", 1)[0].strip().lower()
-            if name in names:
-                pins.append(line.replace(" ", ""))
-        return pins
+        return [line for line in
+                (raw.split("#", 1)[0].strip().replace(" ", "")
+                 for raw in req.read_text("utf-8", errors="replace").splitlines())
+                if "==" in line and line.split("==", 1)[0].lower() == "numpy"]
 
     def _install_deps(self, job: Job, gen: dict, target: Path, py: str) -> bool:
         """install either a requirements file or a pip package.
