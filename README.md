@@ -1,92 +1,75 @@
 # Lopic
 
-Lokale Bildgeneratoren auf deinem PC installieren und starten — mit schicker Oberfläche.
+Install and launch local image generators on your PC — with a sleek interface.
 
-Lopic ist kein Bildgenerator, sondern ein **Verwalter**: er zeigt dir die verfügbaren
-Stable-Diffusion-Werkzeuge, erklärt sie, installiert sie inklusive passender
-CUDA-Torch-Version und startet sie fensterlos im Hintergrund.
+Lopic is not an image generator itself, but a **manager**: it shows you available Stable Diffusion tools, explains them, installs them including the matching CUDA/Torch version, and launches them windowless in the background.
 
-![Lopic](docs/screenshot.png)
+## Features
 
-## Was Lopic kann
+- **Six generators** with descriptions, VRAM requirements, licenses, and installation steps
+- **Automatic hardware detection**: GPU, VRAM, free storage, Git/uv/Python
+- **VRAM matching**: Cards are highlighted in green/yellow/red depending on whether your GPU is sufficient
+- **One-click installation** with live logs and progress bars
+- **Dedicated Python environment per generator**, ensuring they don't interfere with each other
+- **Windowless launch**: No console windows, no stealing focus
 
-- **Sechs Generatoren** mit Beschreibung, VRAM-Bedarf, Lizenz und Installationsschritten
-- **Automatische Hardware-Erkennung**: GPU, VRAM, freier Speicher, Git/uv/Python
-- **VRAM-Abgleich**: Karten werden grün/gelb/rot markiert, je nachdem ob deine GPU reicht
-- **Ein-Klick-Installation** mit Live-Log und Fortschrittsbalken
-- **Eigenes Python-Environment pro Generator**, damit sie sich nicht in die Quere kommen
-- **Fensterloser Start**: kein Konsolenfenster, kein Fokus-Stehlen
+## The Six Generators
 
-## Die sechs Generatoren
-
-| Generator | Wofür | Python | VRAM | Start |
+| Generator | Purpose | Python | VRAM | Startup |
 |---|---|---|---|---|
-| **ComfyUI** | Node-basierte Pipeline-Engine, mächtigste und sparsamste Option | 3.12 | 4 GB | `main.py` |
-| **Forge** | Nachfolger von A1111, gleiche Oberfläche, schneller und sparsamer | 3.10 | 4 GB | `launch.py` |
-| **Fooocus** | Nur Prompt eingeben, fertiges Bild — der einfachste Einstieg | 3.10 | 4 GB | `launch.py` |
-| **AUTOMATIC1111** | Das Original mit dem größten Erweiterungs-Ökosystem | 3.10 | 6 GB | `launch.py` |
-| **InvokeAI** | Schonste Oberfläche mit Canvas und Bildbearbeitung | 3.12 | 6 GB | `invokeai-web` |
-| **SD.Next** | Bild-, Video- und 3D-Generierung in einem Tool, sehr aktiv gepflegt | 3.12 | 6 GB | `launch.py` |
+| **ComfyUI** | Node-based pipeline engine, the most powerful and efficient option | 3.12 | 4 GB | `main.py` |
+| **Forge** | Successor to A1111, same interface, faster and resource-light | 3.10 | 4 GB | `launch.py` |
+| **Fooocus** | Just enter a prompt, get a finished image — the easiest entry point | 3.10 | 4 GB | `launch.py` |
+| **AUTOMATIC1111** | The original with the largest extension ecosystem | 3.10 | 6 GB | `launch.py` |
+| **InvokeAI** | Most beautiful UI with Canvas and built-in image editing | 3.12 | 6 GB | `invokeai-web` |
+| **SD.Next** | Image, video, and 3D generation in a single tool, very actively maintained | 3.12 | 6 GB | `launch.py` |
 
-Alle Angaben zu Quellcode, Startdatei, `requirements`-Dateinamen **und Python-Version**
-sind gegen die tatsächlichen Repositories geprüft, nicht geraten. Das ist nicht
-kosmetisch: Forge, Fooocus und A1111 lehnen auf Windows jedes andere Python-Minor-Release
-ab — Forge und A1111 brechen mit `INCOMPATIBLE PYTHON VERSION` ab, Fooocus beendet die
-Installation mit `exit(0)`. Lopic legt darum für jeden Generator ein eigenes venv in der
-jeweils gepinnten Version an.
+All information regarding source code, startup files, `requirements` filenames, **and Python versions** has been verified against the actual repositories, not guessed. This is not purely cosmetic: on Windows, Forge, Fooocus, and A1111 reject any other Python minor release. Forge and A1111 fail with `INCOMPATIBLE PYTHON VERSION`, while Fooocus terminates the installation with `exit(0)`. Therefore, Lopic creates a separate venv for each generator using its pinned version.
 
 ## Installation
 
 ```bat
-git clone https://github.com/<dein-name>/Lopic.git
+git clone https://github.com<your-name>/Lopic.git
 cd Lopic
 uv venv --python 3.12 .venv
 uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 start.bat
 ```
 
-Ohne `uv` geht auch das klassische `python -m venv .venv` + `pip install -r requirements.txt`.
+Alternatively, you can use the classic `python -m venv .venv` + `pip install -r requirements.txt` without `uv`.
 
-Voraussetzungen: Windows 10/11, WebView2 Runtime (mit Windows und Edge mitgeliefert),
-Git, Python 3.11/3.12 für die Generatoren, NVIDIA-Treiber.
+Prerequisites: Windows 10/11, WebView2 Runtime (included with Windows and Edge), Git, Python 3.11/3.12 for the generators, NVIDIA drivers.
 
-## Wo landet was
+## File Locations
 
-| Pfad | Inhalt |
+| Path | Contents |
 |---|---|
-| `%APPDATA%\Lopic\config.json` | Einstellungen und Fenstergröße |
-| `~\LopicEngines\<Generator>` | Quellcode, eigenes `venv`, Modelle |
+| `%APPDATA%\Lopic\config.json` | Settings and window size |
+| `~\LopicEngines\<Generator>` | Source code, dedicated `venv`, models |
 
-Modelle laden die Generatoren selbst nach. Für den ersten Start plane grob **10–20 GB**
-pro Generator ein, plus die Modelldateien.
+The generators download models automatically on demand. For the initial run, plan roughly **10–20 GB** per generator, plus the model files.
 
-## Projektstruktur
+## Project Structure
 
 ```
 lopic/
-  app.py        Fenster + Python<->JS-Bridge
-  catalog.py    die sechs Generatoren mit allen Metadaten
-  install.py    Installations-Orchestrator (clone, venv, torch, deps)
-  settings.py   Konfiguration unter %APPDATA%
-  system.py     GPU-/VRAM-/Disk-Erkennung
+  app.py        Window + Python <-> JS Bridge
+  catalog.py    The six generators with all metadata
+  install.py    Installation orchestrator (clone, venv, torch, deps)
+  settings.py   Configuration under %APPDATA%
+  system.py     GPU / VRAM / Disk detection
 ui/
   index.html    Markup
-  style.css     Gestaltung
-  app.js        Frontend-Logik
+  style.css     Styling
+  app.js        Frontend logic
 ```
 
-## Technische Notizen
+## Technical Notes
 
-- **UI**: WebView2 (Edge) über `pywebview`, reines HTML/CSS/JS. Damit sieht die
-  Oberfläche aus wie eine Web-App statt wie ein klassisches Fenster.
-- **Warum kein `--listen`**: die Generatoren binden nur an `127.0.0.1`. Ein
-  `--listen` ohne Argument würde die Oberfläche im ganzen Netzwerk freigeben.
-- **pywebview 6.x**: `create_window(loaded=...)` existiert nicht mehr, Events hängen
-  an `window.events.loaded`. Das `pywebviewready`-DOM-Event feuert, *bevor* Inline-Skripte
-  ihre Listener registrieren können — deshalb startet das Frontend über einen Kick aus
-  Python (`_kick_frontend`) statt über einen JS-Listener.
+- **UI**: WebView2 (Edge) via `pywebview`, pure HTML/CSS/JS. This makes the interface look like a web app rather than a classic window.
+- **Why no `--listen`**: The generators only bind to `127.0.0.1`. Using `--listen` without arguments would expose the interface to the entire local network.
+- **pywebview 6.x**: `create_window(loaded=...)` no longer exists; events are now attached to `window.events.loaded`. The `pywebviewready` DOM event fires *before* inline scripts can register their listeners — which is why the frontend is initialized via a trigger from Python (`_kick_frontend`) instead of a JS listener.
 
-## Lizenz
+## License
 
-Der Code in diesem Repository steht unter der MIT-Lizenz. Die installierten Generatoren
-haben jeweils eigene Lizenzen (GPL-3.0, AGPL-3.0, Apache-2.0) — siehe die Karten.
+The code in this repository is licensed under the MIT License. The installed generators have their own respective licenses (GPL-3.0, AGPL-3.0, Apache-2.0) — see the individual cards.
