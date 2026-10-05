@@ -18,7 +18,7 @@ from typing import Callable
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 # install phases, used for the progress fraction
-TOTAL_PHASES = 5
+TOTAL_PHASES = 6
 
 
 @dataclass
@@ -214,14 +214,14 @@ class Installer:
                 raise RuntimeError("Abhaengigkeiten nicht installierbar")
             self._phase(job, 4)
 
-            # -- phase 5: the environment has to actually import --
-            # pip reports "successfully installed" even when a major downgrade
-            # leaves the previous version's shared files behind: forge pins
-            # numpy==1.26.2, which uninstalls the 2.x that torchvision pulled in,
-            # and numpy then fails on a missing _core._multiarray_umath.
+            # -- phase 5: helper repos the generator expects in repositories/ --
             self._phase(job, 5)
-            healthy = self._verify_env(job, gen, target, py)
-            if not healthy:
+            if not self._install_extra_repos(job, gen, target):
+                raise RuntimeError("Hilfs-Repos nicht installierbar")
+
+            # -- phase 6: the venv has to import (see _verify_env) --
+            self._phase(job, 6)
+            if not self._verify_env(job, gen, target, py):
                 raise RuntimeError("Installation liess sich nicht importieren")
 
             with job.lock:
@@ -256,10 +256,9 @@ class Installer:
         for attempt in (1, 2):
             r = self._capture([py, "-c", probe], target, timeout=600)
             if r.returncode == 0:
-                out = (r.stdout or "").strip().splitlines()
-                version = out[-1] if out else "?"
-                self.log(f">>> {gen['name']}: torch {version}")
-                if attempt > 1:
+                version = (r.stdout or "").strip().splitlines()[-1:]
+                self.log(f">>> {gen['name']}: {version[0] if version else '?'}")
+                if attempt == 2:
                     self.log(f"OK {gen['name']}: Umgebung repariert")
                 return True
             tail = (r.stderr or r.stdout or "").strip().splitlines()[-3:]
@@ -279,6 +278,31 @@ class Installer:
                                   env=self._run_env())
         except subprocess.TimeoutExpired:
             return subprocess.CompletedProcess(cmd, 1, "", "timeout")
+
+    def _install_extra_repos(self, job: Job, gen: dict, target: Path) -> bool:
+        """clone the helper repos a generator expects in repositories/.
+
+        forge clones huggingface_guess and BLIP there on first start and adds
+        the folder to sys.path itself (modules/paths.py), so they are not pip
+        packages: huggingface_guess has no setup.py.
+        """
+        for spec in gen.get("extra_repos") or []:
+            folder = target / spec["folder"]
+            name = folder.name
+            if folder.exists():
+                self.log(f"OK {name} ist schon da")
+                continue
+            folder.parent.mkdir(parents=True, exist_ok=True)
+            # full clone: --depth 1 cannot check out an arbitrary commit after
+            self.log(f">>> {gen['name']}: {name} klonen")
+            if not self._run(job, ["git", "clone", spec["repo"], str(folder)],
+                             target, f"{gen['name']}: {name}"):
+                return False
+            if spec.get("commit") and not self._run(
+                    job, ["git", "checkout", spec["commit"]], folder,
+                    f"{gen['name']}: {name} auf Commit"):
+                return False
+        return True
 
     def _install_deps(self, job: Job, gen: dict, target: Path, py: str) -> bool:
         """install either a requirements file or a pip package.
@@ -346,9 +370,7 @@ class Installer:
 
     def _spawn(self, gen: dict, cmd: list[str], cwd: Path,
                env_extra: dict | None = None) -> None:
-        env = dict(os.environ)
-        env["PYTHONUNBUFFERED"] = "1"
-        env.pop("PYTHONPATH", None)
+        env = self._run_env()
         if env_extra:
             env.update(env_extra)
 

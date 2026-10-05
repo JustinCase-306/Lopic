@@ -73,6 +73,17 @@ CATALOG: list[dict[str, Any]] = [
         "requirements": "requirements_versions.txt",
         "entry": "launch.py",
         "entry_module": "launch",
+        # forge clones these at first start and installs them from source; without
+        # them `import webui` dies on huggingface_guess. commit pins taken from
+        # modules/launch_utils.py so the clone is reproducible.
+        "extra_repos": [
+            {"repo": "https://github.com/lllyasviel/huggingface_guess.git",
+             "folder": "repositories/huggingface_guess",
+             "commit": "84826248b49bb7ca754c73293299c4d4e23a548d"},
+            {"repo": "https://github.com/salesforce/BLIP.git",
+             "folder": "repositories/BLIP",
+             "commit": None},
+        ],
         "python": "3.10",
         "port": 7860,
         "vram_min_gb": 4,
