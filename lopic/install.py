@@ -298,7 +298,7 @@ class Installer:
         """force-reinstall whatever the RECORD check flagged."""
         damaged = self._damaged_packages(target, py)
         if not damaged:
-            self.log(f">>> {gen['name']}: keine beschaedigten Pakete gefunden")
+            self.log(f">>> {gen['name']}: Paketdateien geprueft, alle vollstaendig")
             return True
         self.log(f">>> {gen['name']}: beschaedigt -> {', '.join(damaged)}")
         return self._run(job,
@@ -313,7 +313,14 @@ class Installer:
         numpy==1.26.2, torchvision pulls numpy 2.x first, and the downgrade
         leaves numpy unable to import. re-running the requirements install
         puts the pinned files back, so one retry repairs the environment.
+
+        the import check below only covers numpy and torch. a package such as
+        python-dateutil can lose every file while keeping its dist-info, which
+        importing numpy never reveals and pip keeps calling satisfied, so the
+        RECORD check runs first and covers everything that is installed.
         """
+        self._repair_packages(job, gen, target, py)
+
         probe = ("import numpy, torch; "
                  "print('torch', torch.__version__, '| cuda', torch.version.cuda, "
                  "'| gpu', torch.cuda.is_available())")
@@ -329,7 +336,6 @@ class Installer:
             self.log(f">>> {gen['name']}: Importpruefung fehlgeschlagen "
                      f"({'; '.join(tail)[:180]})")
             if attempt == 1:
-                self._repair_packages(job, gen, target, py)
                 self.log(f">>> {gen['name']}: Abhaengigkeiten neu installieren")
                 self._install_deps(job, gen, target, py)
         self.log(f"FEHLER {gen['name']}: Umgebung bleibt unbrauchbar")

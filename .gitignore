@@ -18,6 +18,9 @@ LopicEngines/
 .vscode/
 .idea/
 *.swp
+
+# local project notes: pitfalls and current state, never in the repo
+.hermes.md
 Thumbs.db
 desktop.ini
 
