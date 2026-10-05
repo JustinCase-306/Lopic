@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -315,6 +316,26 @@ class Installer:
                 return False
         return True
 
+    @staticmethod
+    def _remove_tree(target: Path) -> bool:
+        """delete a directory tree, including git's read-only pack files.
+
+        git marks objects/pack/*.pack|.idx read-only on purpose. on windows
+        rmtree then fails with PermissionError (WinError 5) and, worse, with
+        ignore_errors=True it fails silently -- the folder survives and the
+        clone that follows dies with a misleading "not an empty directory".
+        returns whether the path is really gone.
+        """
+        if not target.exists():
+            return True
+        for path in sorted(target.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+            try:
+                os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            except OSError:
+                pass                      # a vanished entry is fine
+        shutil.rmtree(target, ignore_errors=True)
+        return not target.exists()
+
     def _replace_source(self, job: Job, gen: dict, root: Path, target: Path) -> bool:
         """re-clone the generator's repo without losing what the clone cannot bring back.
 
@@ -334,7 +355,10 @@ class Installer:
                         moved.add(item.name)
                 # git refuses a destination that still exists, not only a
                 # non-empty one, so the folder itself has to go too
-                shutil.rmtree(target, ignore_errors=True)
+                if not self._remove_tree(target):
+                    self.log(f"FEHLER {gen['name']}: Quellordner nicht loeschbar, "
+                             f"bitte {target} manuell entfernen")
+                    return False
             self.log(f">>> {gen['name']}: Quellordner wird neu geklont")
             if not self._run(job, ["git", "clone", "--depth", "1", gen["repo"], str(target)],
                              root, f"{gen['name']}: git clone"):
@@ -347,7 +371,7 @@ class Installer:
                 self.log(f">>> {gen['name']}: {name} beibehalten")
             return True
         finally:
-            shutil.rmtree(stash, ignore_errors=True)
+            self._remove_tree(stash)
 
     @staticmethod
     def _is_checkout(target: Path) -> bool:
