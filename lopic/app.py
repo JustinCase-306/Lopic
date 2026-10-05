@@ -73,8 +73,8 @@ class LopicApi:
     def jobs_payload(self) -> dict:
         return {
             jid: {
-                "id": j.id,
-                "status": j.status,
+                "id": job.id,
+                "status": job.status,
                 "progress": job.progress,
                 "installed": job.installed,
                 "message": job.message,

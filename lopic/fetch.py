@@ -10,11 +10,9 @@ progress is reported per model, streaming from the http response so a
 
 from __future__ import annotations
 
-import os
-import shutil
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -34,14 +32,9 @@ def target_for(gen_id: str, rel_path: str) -> Path:
     if len(parts) > 1 and parts[0] in ("unet", "vae", "text_encoder", "text_encoder_2"):
         # diffusers layout: keep the structure, it is what the code imports
         return Path("models", *parts)
-    if gen_id == "comfyui":
-        return Path("models") / "checkpoints" / parts[-1]
-    if gen_id in ("forge", "a1111", "fooocus"):
-        return Path("models") / "Stable-diffusion" / parts[-1]
-    if gen_id == "sdnext":
-        return Path("models") / "Stable-diffusion" / parts[-1]
-    # invokeai stores checkpoints under models/diffusers by family
-    return Path("models", "checkpoints", parts[-1])
+    # comfyui reads checkpoints/, everything else reads Stable-diffusion/
+    folder = "checkpoints" if gen_id == "comfyui" else "Stable-diffusion"
+    return Path("models") / folder / parts[-1]
 
 
 @dataclass
@@ -53,11 +46,10 @@ class Download:
     total: int = 0
     current_file: str = ""
     error: str = ""
-    files: list[dict] = field(default_factory=list)
 
 
 class ModelFetcher:
-    """one model at a time; a token is only used when the user supplies one."""
+    """one model at a time. no token: the catalog only lists ungated files."""
 
     def __init__(self, root: Path, emit: Callable[[str], None],
                  emit_state: Callable[[dict], None]):
@@ -115,7 +107,11 @@ class ModelFetcher:
 
     def _worker(self, model: dict, dl: Download) -> None:
         try:
-            done_bytes = 0
+            # progress spans the whole model: dl.total is the sum over every file
+            # and dl.received is the bytes of the finished files plus the current
+            # one, tracked by accumulating chunk sizes
+            dl.total = sum(f["size"] for f in model["files"])
+            done = 0
             for spec in model["files"]:
                 dl.current_file = spec["name"]
                 self.emit(f">>> {model['name']}: {spec['name']}")
@@ -126,23 +122,17 @@ class ModelFetcher:
                 url = f"{HF}/{spec['repo']}/resolve/main/{spec['name']}"
                 req = urllib.request.Request(url, headers={"User-Agent": "Lopic"})
                 with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-                    total = int(resp.headers.get("Content-Length") or spec["size"])
                     got = 0
                     with open(tmp, "wb") as fh:
-                        while True:
-                            chunk = resp.read(CHUNK)
-                            if not chunk:
-                                break
+                        while chunk := resp.read(CHUNK):
                             fh.write(chunk)
                             got += len(chunk)
-                            dl.received = done_bytes + got
-                            dl.total = max(dl.total, dl.received)
+                            dl.received = done + got
                             dl.progress = min(0.999, dl.received / dl.total
                                               if dl.total else 0)
                             self._push(dl)
                 tmp.replace(target)
-                done_bytes += got
-                dl.files.append(spec["name"])
+                done += got
                 mb = got / (1024 * 1024)
                 self.emit(f"OK {mb:.0f} MB -> {target}")
 

@@ -17,9 +17,6 @@ from __future__ import annotations
 
 from typing import Any
 
-# hugging face base for downloads
-HF = "https://huggingface.co"
-
 # license shorthand -> one line the user can actually read
 LICENSES = {
     "apache-2.0": "Apache 2.0 — frei verwendbar",
