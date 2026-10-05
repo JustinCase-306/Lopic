@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -174,11 +175,7 @@ class Installer:
                                  f"{gen['name']}: git pull"):
                     self.log("HINWEIS Update fehlgeschlagen, vorhandene Version bleibt")
             else:
-                if target.exists():
-                    self.log(f">>> {gen['name']}: unvollstaendige Installation wird ersetzt")
-                    shutil.rmtree(target, ignore_errors=True)
-                if not self._run(job, ["git", "clone", "--depth", "1", gen["repo"], str(target)],
-                                 self.root, f"{gen['name']}: git clone"):
+                if not self._replace_source(job, gen, self.root, target):
                     raise RuntimeError("clone fehlgeschlagen")
             self._phase(job, 1)
 
@@ -318,6 +315,40 @@ class Installer:
                 return False
         return True
 
+    def _replace_source(self, job: Job, gen: dict, root: Path, target: Path) -> bool:
+        """re-clone the generator's repo without losing what the clone cannot bring back.
+
+        `git clone` refuses any non-empty destination (not just a non-empty
+        .git), so the keeper directories have to move out, and back in after.
+        they are the hand-cloned helper repos and the venv -- 9 GB and hours of
+        work that a plain rmtree here throws away.
+        """
+        keep = {"repositories", "venv"}
+        stash = Path(tempfile.mkdtemp(prefix="lopic-stash-", dir=str(root)))
+        moved: set[str] = set()
+        try:
+            if target.is_dir():
+                for item in sorted(target.iterdir(), key=lambda p: p.name):
+                    if item.name in keep:
+                        shutil.move(str(item), str(stash / item.name))
+                        moved.add(item.name)
+                # git refuses a destination that still exists, not only a
+                # non-empty one, so the folder itself has to go too
+                shutil.rmtree(target, ignore_errors=True)
+            self.log(f">>> {gen['name']}: Quellordner wird neu geklont")
+            if not self._run(job, ["git", "clone", "--depth", "1", gen["repo"], str(target)],
+                             root, f"{gen['name']}: git clone"):
+                return False
+            for name in sorted(moved):
+                dest = target / name
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.move(str(stash / name), str(dest))
+                self.log(f">>> {gen['name']}: {name} beibehalten")
+            return True
+        finally:
+            shutil.rmtree(stash, ignore_errors=True)
+
     @staticmethod
     def _is_checkout(target: Path) -> bool:
         """true when target holds a real git checkout, not just a .git dir.
@@ -334,6 +365,7 @@ class Installer:
                            creationflags=CREATE_NO_WINDOW)
         return r.returncode == 0 and r.stdout.strip() == "true"
 
+    @staticmethod
     def _pinned_packages(gen: dict, target: Path) -> list[str]:
         """read the engine's strict pins from its requirements file.
 
