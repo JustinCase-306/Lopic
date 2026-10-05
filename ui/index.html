@@ -32,25 +32,29 @@
 
 <main class="layout">
   <section class="catalog">
-    <div class="catalog-head">
-      <h2>Bildgeneratoren</h2>
-      <span class="count" id="cat-count">–</span>
-      <div class="filters" id="filters">
-        <button class="chip active" data-filter="all">Alle</button>
-        <button class="chip" data-filter="fits">Passt auf meine GPU</button>
-        <button class="chip" data-filter="installed">Installiert</button>
-        <button class="chip" data-filter="easy">Einsteiger</button>
-      </div>
+  <div class="catalog-head">
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="gens">Generatoren</button>
+      <button class="tab" data-tab="models">Modelle</button>
     </div>
-    <div class="grid" id="grid"></div>
+    <span class="count" id="cat-count">–</span>
+    <div class="filters" id="filters">
+      <button class="chip active" data-filter="all">Alle</button>
+      <button class="chip" data-filter="fits">Passt auf meine GPU</button>
+      <button class="chip" data-filter="installed">Installiert</button>
+      <button class="chip" data-filter="easy">Einsteiger</button>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="grid hidden" id="grid-models"></div>
   </section>
 
   <aside class="detail" id="detail">
     <div class="detail-inner" id="detail-inner">
       <div class="empty-detail">
-        <div class="empty-icon" aria-hidden="true"></div>
-        <h3>Wähle einen Generator</h3>
-        <p>Klick links auf eine Karte, um Beschreibung, Anforderungen und Installationsschritte zu sehen.</p>
+        <div class="idle-icon" aria-hidden="true"></div>
+        <h3>Waehle einen Generator</h3>
+        <p>Klick links auf eine Karte, um Beschreibung, Anforderungen und die Installationsschritte zu sehen.</p>
       </div>
     </div>
   </aside>

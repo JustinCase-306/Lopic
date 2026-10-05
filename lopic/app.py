@@ -10,6 +10,8 @@ from pathlib import Path
 import webview
 
 from .catalog import CATALOG, PY_PIN_NOTE, by_id
+from .models import MODELS, by_id as model_by_id, license_text
+from .fetch import ModelFetcher
 from .install import Installer
 from .settings import load_config, save_config
 from .system import system_report
@@ -24,9 +26,11 @@ class LopicApi:
         self.cfg = load_config()
         self.sys = system_report()
         self.selected: str | None = None
+        self.selected_model: str | None = None
         self.window = None
         self.root = Path(self.cfg["install_root"])
         self.installer = Installer(self.root, self._emit_log, self._emit_gen)
+        self.fetcher = ModelFetcher(self.root, self._emit_log, self._emit_model)
 
     # ---------- pushes from python into the ui ----------
 
@@ -44,10 +48,14 @@ class LopicApi:
     def _emit_gen(self, state: dict) -> None:
         self._push("window.onPy && window.onPy.genState(arguments[0])", state)
 
+    def _emit_model(self, state: dict) -> None:
+        self._push("window.onPy && window.onPy.modelState(arguments[0])", state)
+
     def _emit_state(self) -> None:
         self._push(
             "window.onPy && window.onPy.state(arguments[0])",
-            {"sys": self.sys, "gens": self.gens_payload(), "jobs": self.jobs_payload()},
+            {"sys": self.sys, "gens": self.gens_payload(), "jobs": self.jobs_payload(),
+             "models": self.models_payload(), "modelJobs": self.model_jobs_payload()},
         )
 
     # ---------- data for the ui ----------
@@ -74,6 +82,40 @@ class LopicApi:
             for jid, job in self.installer.jobs.items()
         }
 
+    def models_payload(self) -> list[dict]:
+        installed = self.fetcher.installed_models()
+        out = []
+        for m in MODELS:
+            row = dict(m)
+            row["license_text"] = license_text(m["license"])
+            row["installed"] = installed.get(m["id"], False)
+            row["size_total"] = sum(f["size"] for f in m["files"])
+            out.append(row)
+        return out
+
+    def model_jobs_payload(self) -> dict:
+        return {
+            mid: {"id": d.model_id, "status": d.status, "progress": d.progress,
+                  "received": d.received, "total": d.total}
+            for mid, d in self.fetcher.downloads.items()
+        }
+
+    def on_select_model(self, model_id: str) -> None:
+        self.selected_model = model_id
+
+    def download_model(self, model_id: str) -> dict:
+        m = model_by_id(model_id)
+        if m is None:
+            return {"ok": False, "error": "unbekanntes Modell"}
+        self.fetcher.start(m)
+        return {"ok": True}
+
+    def model_folder(self) -> dict:
+        self.root.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            os.startfile(str(self.root))
+        return {"ok": True}
+
     def _installed_map(self) -> dict[str, bool]:
         result: dict[str, bool] = {}
         for gen in CATALOG:
@@ -91,6 +133,8 @@ class LopicApi:
             "sys": self.sys,
             "gens": self.gens_payload(),
             "jobs": self.jobs_payload(),
+            "models": self.models_payload(),
+            "modelJobs": self.model_jobs_payload(),
         }
 
     def on_select(self, gen_id: str) -> None:
