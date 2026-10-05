@@ -117,14 +117,25 @@ class LopicApi:
         return {"ok": True}
 
     def _installed_map(self) -> dict[str, bool]:
-        result: dict[str, bool] = {}
-        for gen in CATALOG:
-            venv = self.root / gen["folder"] / "venv"
-            ok = (venv / "Scripts" / "python.exe").exists()
-            if ok and gen.get("package_install"):
-                ok = (venv / "Scripts" / f"{gen['package_install']}-web.exe").exists()
-            result[gen["id"]] = ok
-        return result
+        """true only when the engine could actually start (see _engine_ready)."""
+        return {gen["id"]: self._engine_ready(gen) for gen in CATALOG}
+
+    def _engine_ready(self, gen: dict) -> bool:
+        """the launcher's own requirements, checked on disk."""
+        target = self.root / gen["folder"] / "venv"
+        py = target / "Scripts" / "python.exe"
+        if not py.is_file():
+            return False
+        package = gen.get("package_install")
+        if package and not (target / "Scripts" / f"{package}-web.exe").is_file():
+            return False
+        entry = gen.get("entry")
+        if entry and not (target.parent / entry).is_file():
+            return False
+        # torch is what every one of these imports first; its absence is the
+        # difference between "installed" and "half of phase 3"
+        site = target / "Lib" / "site-packages"
+        return any(site.glob("torch*")) if site.is_dir() else False
 
     # ---------- api surface used by the ui ----------
 
