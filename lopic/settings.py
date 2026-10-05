@@ -26,7 +26,6 @@ def default_config() -> dict[str, Any]:
         "install_root": str(Path.home() / "LopicEngines"),
         "window": {"width": 1280, "height": 840},
         "installed": {},
-        "hf_token": "",
     }
 
 

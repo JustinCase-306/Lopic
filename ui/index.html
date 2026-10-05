@@ -20,6 +20,10 @@
     </div>
   </div>
   <div class="sysbar" id="sysbar" title="System-Erkennung">
+    <button class="sysitem refresh" onclick="callApi('rescan')" title="System neu einlesen">
+      <span class="lbl">Aktualisieren</span>
+      <span class="val">&#8635;</span>
+    </button>
     <div class="sysitem"><span class="lbl">GPU</span><span class="val" id="sys-gpu">–</span></div>
     <div class="sysitem"><span class="lbl">VRAM</span><span class="val" id="sys-vram">–</span></div>
     <div class="sysitem"><span class="lbl">Speicher frei</span><span class="val" id="sys-disk">–</span></div>

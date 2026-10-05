@@ -277,14 +277,21 @@ class Installer:
             self.emit(f"FEHLER Startskript von {gen['name']} nicht gefunden "
                       f"({package}-web.exe). Ist die Installation unvollstaendig?")
             return
-        self._spawn(gen, [str(exe), "--port", str(gen["port"])], target)
+        # invokeai-web only accepts --root/--config/--web-legacy/--version
+        # (invokeai/frontend/cli/arg_parser.py). Passing --port made it abort with
+        # an argparse error, so the port is configured via env instead.
+        env_extra = {"INVOKEAI_ROOT": str(target / "invokeai_root")}
+        self._spawn(gen, [str(exe)], target, env_extra=env_extra)
         self.emit(f"OK {gen['name']} startet auf http://127.0.0.1:{gen['port']} "
                   f"(fensterlos)")
 
-    def _spawn(self, gen: dict, cmd: list[str], cwd: Path) -> None:
+    def _spawn(self, gen: dict, cmd: list[str], cwd: Path,
+               env_extra: dict | None = None) -> None:
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
         env.pop("PYTHONPATH", None)
+        if env_extra:
+            env.update(env_extra)
 
         info = None
         if os.name == "nt":

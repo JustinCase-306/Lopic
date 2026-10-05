@@ -148,6 +148,12 @@ body {
   text-overflow: ellipsis;
 }
 
+/* rescan trigger: a <button> wearing the .sysitem box */
+.sysitem.refresh { font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.sysitem.refresh .val { color: var(--accent-2); font-size: 17px; line-height: 1; }
+.sysitem.refresh:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--stroke-2); }
+.sysitem.refresh:hover .val { transform: rotate(180deg); transition: transform 0.4s ease; }
+
 /* ---------- layout ---------- */
 .layout {
   position: relative;
