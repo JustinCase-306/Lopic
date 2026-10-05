@@ -38,7 +38,7 @@ function callApi(name, ...args) {
       }
       setTimeout(() => attempt(triesLeft - 1), 120);
     };
-    attempt(60);
+    attempt(150);
   });
 }
 
@@ -556,3 +556,11 @@ function boot() {
 /* python kicks us: pywebview 6 injects api.js on before_load, so the DOM
    pywebviewready event fires before inline scripts exist. never rely on it. */
 window.lopicBoot = boot;
+
+/* start ourselves.
+   python used to kick the frontend from timer threads, so two threads were
+   calling evaluate_js while the push queue's drain thread was also using it,
+   and the bridge wedged: pushes never landed and the buttons looked dead.
+   callApi already retries until the bridge exists, so booting here is safe and
+   keeps python off the bridge for everything except pushing. */
+boot();

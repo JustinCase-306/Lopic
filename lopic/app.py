@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import queue
 import sys
 import threading
 from pathlib import Path
@@ -19,6 +21,14 @@ from .system import system_report
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 
 
+def _js(value) -> str:
+    """json is valid javascript, so this is the safe way to inline a payload.
+
+    window.evaluate_js has no argument passing (see LopicApi._push).
+    """
+    return json.dumps(value)
+
+
 class LopicApi:
     """everything the html may call. keep return values json-friendly."""
 
@@ -31,32 +41,53 @@ class LopicApi:
         self.root = Path(self.cfg["install_root"])
         self.installer = Installer(self.root, self._emit_log, self._emit_gen)
         self.fetcher = ModelFetcher(self.root, self._emit_log, self._emit_model)
+        self._push_queue: queue.Queue[str] = queue.Queue()
+        threading.Thread(target=self._drain_push, daemon=True,
+                         name="lopic-push").start()
 
     # ---------- pushes from python into the ui ----------
 
-    def _push(self, js: str, *args) -> None:
+    def _push(self, script: str) -> None:
+        """hand one script to the ui thread through a queue.
+
+        two traps live here. first, window.evaluate_js takes (script, callback)
+        and has no argument passing: handing the payload in as a second
+        positional argument made pywebview treat it as a callback (a non-empty
+        string is truthy), call it, raise, and the exception was swallowed --
+        so every push to the ui vanished and the buttons did their work without
+        reporting anything. the payload is inlined into the script instead.
+        second, evaluate_js called synchronously from inside a js->python call
+        blocks: the ui waits on the js that is waiting on python. queueing
+        keeps every push off that thread and in order.
+        """
         if self.window is None:
             return
-        try:
-            self.window.evaluate_js(js, *args)
-        except Exception:  # noqa: BLE001 - the window may be closing
-            pass
+        self._push_queue.put(script)
+
+    def _drain_push(self) -> None:
+        while True:
+            script = self._push_queue.get()
+            window = self.window
+            if window is None:
+                continue
+            try:
+                window.evaluate_js(script)
+            except Exception:  # noqa: BLE001 - the window may be closing
+                pass
 
     def _emit_log(self, line: str) -> None:
-        self._push("window.onPy && window.onPy.log(arguments[0])", line)
+        self._push(f"window.onPy && window.onPy.log({_js(line)})")
 
     def _emit_gen(self, state: dict) -> None:
-        self._push("window.onPy && window.onPy.genState(arguments[0])", state)
+        self._push(f"window.onPy && window.onPy.genState({_js(state)})")
 
     def _emit_model(self, state: dict) -> None:
-        self._push("window.onPy && window.onPy.modelState(arguments[0])", state)
+        self._push(f"window.onPy && window.onPy.modelState({_js(state)})")
 
     def _emit_state(self) -> None:
-        self._push(
-            "window.onPy && window.onPy.state(arguments[0])",
-            {"sys": self.sys, "gens": self.gens_payload(), "jobs": self.jobs_payload(),
-             "models": self.models_payload(), "modelJobs": self.model_jobs_payload()},
-        )
+        payload = {"sys": self.sys, "gens": self.gens_payload(), "jobs": self.jobs_payload(),
+                   "models": self.models_payload(), "modelJobs": self.model_jobs_payload()}
+        self._push(f"window.onPy && window.onPy.state({_js(payload)})")
 
     # ---------- data for the ui ----------
 
@@ -205,38 +236,6 @@ class LopicApi:
         return {"ok": True}
 
 
-def _kick_frontend(window, tries: int = 40) -> None:
-    """start the frontend from python.
-
-    pywebview 6 injects api.js on `before_load`, so the DOM `pywebviewready`
-    event fires BEFORE any inline script can register a listener for it.
-    kicking from python avoids that race entirely.
-
-    the `loaded` event is not a reliable "the dom is ready" signal here, and a
-    single evaluate_js can land while the document is still parsing, so kick
-    repeatedly until the frontend reports that it is running.
-    """
-    def kick(left: int) -> None:
-        try:
-            already = window.evaluate_js("window.__lopicBooted === true")
-        except Exception:  # noqa: BLE001
-            already = False
-        if already:
-            return
-        try:
-            window.evaluate_js(
-                "if (typeof window.lopicBoot === 'function') {"
-                "  window.__lopicBooted = true;"
-                "  window.lopicBoot();"
-                "}")
-        except Exception:  # noqa: BLE001
-            pass
-        if left > 1:
-            threading.Timer(0.15, kick, args=(left - 1,)).start()
-
-    threading.Timer(0.2, kick, args=(tries,)).start()
-
-
 def run() -> int:
     cfg = load_config()
     win_cfg = cfg.get("window", {})
@@ -257,7 +256,8 @@ def run() -> int:
         text_select=True,
     )
     api.window = win
-    win.events.loaded += lambda: _kick_frontend(win)
+    # the frontend boots itself (see ui/app.js); only the push drain thread
+    # touches the bridge from python
 
     def on_closing():
         api.installer.shutdown()
