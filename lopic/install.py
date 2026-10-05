@@ -316,7 +316,12 @@ class Installer:
         if req_name:
             req = target / req_name
             if req.exists():
-                return self._run(job, [py, "-m", "pip", "install", "-r", str(req)],
+                # only-if-needed: a pin older than what torch just installed
+                # (forge numpy==1.26.2 vs torch's 2.x) must not trigger an
+                # uninstall, that one left numpy half applied
+                return self._run(job, [py, "-m", "pip", "install",
+                                       "--upgrade-strategy", "only-if-needed",
+                                       "-r", str(req)],
                                  target, f"{gen['name']}: Abhaengigkeiten")
             self.log(f"FEHLER {req_name} nicht gefunden im Repository")
             return False
