@@ -354,9 +354,18 @@ class Installer:
         for spec in gen.get("extra_repos") or []:
             folder = target / spec["folder"]
             name = folder.name
-            if folder.exists():
+            if self._is_own_checkout(folder):
                 self.log(f"OK {name} ist schon da")
                 continue
+            if folder.exists():
+                # a folder that is not its own checkout is worse than a missing
+                # one: `git -C folder` then walks up to the generator's own
+                # repository, and a checkout there rewrites the generator's
+                # working tree. that is how a damaged assets repo once emptied
+                # forge's modules/.
+                self.log(f">>> {gen['name']}: {name} hat kein eigenes .git, wird ersetzt")
+                if not self._remove_tree(folder):
+                    return False
             folder.parent.mkdir(parents=True, exist_ok=True)
             # full clone: --depth 1 cannot check out an arbitrary commit after
             self.log(f">>> {gen['name']}: {name} klonen")
@@ -368,6 +377,28 @@ class Installer:
                     f"{gen['name']}: {name} auf Commit"):
                 return False
         return True
+
+    @staticmethod
+    def _is_own_checkout(folder: Path) -> bool:
+        """true only when folder is the root of its own git checkout.
+
+        `git -C folder rev-parse --is-inside-work-tree` is not enough: a
+        half-written .git makes git walk up to the parent repository and answer
+        "true" for a folder whose files are gone. asking for the toplevel and
+        comparing it catches that, and that is what keeps a damaged helper repo
+        from rewriting the generator's tree on the next checkout.
+        """
+        if not (folder / ".git").exists():
+            return False
+        r = subprocess.run(["git", "-C", str(folder), "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True, timeout=60,
+                           creationflags=CREATE_NO_WINDOW)
+        if r.returncode != 0:
+            return False
+        try:
+            return Path(r.stdout.strip()).resolve() == folder.resolve()
+        except OSError:
+            return False
 
     def _build_wheels(self, job: Job, gen: dict, target: Path, py: str) -> dict[str, str]:
         """build the generator's pip packages here instead of at its first start.

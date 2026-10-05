@@ -83,6 +83,12 @@ CATALOG: list[dict[str, Any]] = [
             {"repo": "https://github.com/salesforce/BLIP.git",
              "folder": "repositories/BLIP",
              "commit": None},
+            # forge fetches this one on first start too, and a failed fetch is
+            # fatal ("Couldn't fetch assets"). pin it here so the checkout is
+            # complete and forge's own git_clone finds its hash already in place.
+            {"repo": "https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets.git",
+             "folder": "repositories/stable-diffusion-webui-assets",
+             "commit": "6f7db241d2f8ba7457bac5ca9753331f0c266917"},
         ],
         # forge pip-installs these two from github zips on every first start.
         # that build runs in pip's isolated overlay, which has no pkg_resources,
