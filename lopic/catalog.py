@@ -84,6 +84,20 @@ CATALOG: list[dict[str, Any]] = [
              "folder": "repositories/BLIP",
              "commit": None},
         ],
+        # forge pip-installs these two from github zips on every first start.
+        # that build runs in pip's isolated overlay, which has no pkg_resources,
+        # so it dies with "No module named pkg_resources" before the engine can
+        # start. building the wheels here and pointing forge at them via its own
+        # CLIP_PACKAGE / OPENCLIP_PACKAGE env vars avoids the isolation. the urls
+        # are forge's defaults, read from modules/launch_utils.py.
+        "prebuilt_wheels": [
+            {"name": "clip",
+             "url": "https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip",
+             "import_name": "clip", "env": "CLIP_PACKAGE"},
+            {"name": "open_clip_torch",
+             "url": "https://github.com/mlfoundations/open_clip/archive/bb6e834e9c70d9c27d0dc3ecedeebeaeb1ffad6b.zip",
+             "import_name": "open_clip", "env": "OPENCLIP_PACKAGE"},
+        ],
         "python": "3.10",
         "port": 7860,
         "vram_min_gb": 4,

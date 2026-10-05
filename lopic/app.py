@@ -132,6 +132,11 @@ class LopicApi:
         entry = gen.get("entry")
         if entry and not (target.parent / entry).is_file():
             return False
+        # the hand-cloned helper repos are on sys.path, not in site-packages:
+        # without them the engine imports fine and dies at startup
+        for spec in gen.get("extra_repos") or []:
+            if not (target.parent / spec["folder"]).is_dir():
+                return False
         # torch is what every one of these imports first; its absence is the
         # difference between "installed" and "half of phase 3"
         site = target / "Lib" / "site-packages"

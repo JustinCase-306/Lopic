@@ -226,6 +226,9 @@ class Installer:
                 raise RuntimeError("Abhaengigkeiten nicht installierbar")
             self._phase(job, 4)
 
+            if not self._build_wheels(job, gen, target, py):
+                raise RuntimeError("Vorbereitete Pakete nicht baubar")
+
             # -- phase 5: helper repos the generator expects in repositories/ --
             self._phase(job, 5)
             if not self._install_extra_repos(job, gen, target):
@@ -315,6 +318,49 @@ class Installer:
                     f"{gen['name']}: {name} auf Commit"):
                 return False
         return True
+
+    def _build_wheels(self, job: Job, gen: dict, target: Path, py: str) -> dict[str, str]:
+        """build the generator's pip packages here instead of at its first start.
+
+        forge pip-installs clip and open_clip from github zips on every fresh
+        install. pip builds those in an isolated overlay that has no
+        pkg_resources, so the build dies before the engine ever starts. building
+        them into the venv now (no isolation) and handing forge the wheel paths
+        removes the failure entirely. returns env var -> wheel path.
+        """
+        specs = gen.get("prebuilt_wheels") or []
+        if not specs:
+            return {}
+        env: dict[str, str] = {}
+        wheels = target / "_lopic_wheels"
+        wheels.mkdir(parents=True, exist_ok=True)
+        for spec in specs:
+            name = spec["name"]
+            marker = wheels / f"{name}.done"
+            if marker.is_file():
+                env[spec["env"]] = marker.read_text("utf-8").strip()
+                self.log(f">>> {gen['name']}: {name} ist bereits gebaut")
+                continue
+            self.log(f">>> {gen['name']}: {name} wird gebaut (ohne isolation)")
+            r = subprocess.run([py, "-m", "pip", "wheel", "--no-build-isolation",
+                                "--no-deps", "-w", str(wheels), spec["url"]],
+                               cwd=str(target), capture_output=True, text=True,
+                               timeout=1800, env=self._run_env(),
+                               creationflags=CREATE_NO_WINDOW)
+            if r.returncode != 0:
+                tail = (r.stderr or r.stdout or "").strip().splitlines()[-3:]
+                self.log(f"FEHLER {name} nicht baubar: {'; '.join(tail)[:200]}")
+                shutil.rmtree(wheels, ignore_errors=True)
+                return {}
+            made = sorted(wheels.glob(f"{name}-*.whl"), key=lambda p: p.stat().st_mtime)
+            if not made:
+                self.log(f"FEHLER {name}: kein Wheel entstanden")
+                shutil.rmtree(wheels, ignore_errors=True)
+                return {}
+            marker.write_text(str(made[-1]), encoding="utf-8")
+            env[spec["env"]] = str(made[-1])
+            self.log(f">>> {gen['name']}: {name} gebaut ({made[-1].name})")
+        return env
 
     @staticmethod
     def _remove_tree(target: Path) -> bool:
@@ -431,6 +477,44 @@ class Installer:
 
     # ---------- launch / stop ----------
 
+    def _wheel_env(self, gen: dict, target: Path) -> dict[str, str]:
+        """env for the engine: prebuilt wheels, plus the engine's own pins.
+
+        forge installs some packages on its first start and does not list them
+        in requirements_versions.txt -- bitsandbytes among them. those installs
+        pull numpy 2.x, and scikit-image 0.21 is compiled against the 2.x ABI,
+        so the next import dies with "numpy.dtype size changed". re-pinning here
+        keeps the ABI consistent; the pinned version satisfies those packages
+        fine, only the compiled extension needs the match.
+        """
+        env: dict[str, str] = {}
+        for spec in gen.get("prebuilt_wheels") or []:
+            marker = target / "_lopic_wheels" / f"{spec['name']}.done"
+            if marker.is_file():
+                wheel = marker.read_text("utf-8").strip()
+                if Path(wheel).is_file():
+                    env[spec["env"]] = wheel
+        pins = self._pinned_packages(gen, target)
+        if pins and self._pins_broken(target, pins):
+            self.log(f">>> {gen['name']}: numpy wurde beim Start überschrieben, "
+                     f"ersetze {', '.join(pins)}")
+            py = self._python_of(target / "venv")
+            if py:
+                self._run(Job(id=gen["id"]), [py, "-m", "pip", "install", *pins],
+                          target, f"{gen['name']}: Pins wiederherstellen")
+        return env
+
+    @staticmethod
+    def _pins_broken(target: Path, pins: list[str]) -> bool:
+        """true when the installed version no longer matches a pin."""
+        for pin in pins:
+            name, _, want = pin.partition("==")
+            for info in (target / "venv" / "Lib" / "site-packages").glob(
+                    f"{name}-*.dist-info"):
+                if not info.name[len(name) + 1:].startswith(want):
+                    return True
+        return False
+
     def launch(self, gen: dict) -> None:
         target = self.root / gen["folder"]
         py = self._python_of(target / "venv")
@@ -448,7 +532,7 @@ class Installer:
         # bind localhost only. --listen without an argument would open all
         # interfaces, which we do not want for a local generator.
         cmd = [py, str(target / entry), "--port", str(gen["port"])]
-        self._spawn(gen, cmd, target)
+        self._spawn(gen, cmd, target, env_extra=self._wheel_env(gen, target))
         self.emit(f"OK {gen['name']} startet auf http://127.0.0.1:{gen['port']} "
                   f"(fensterlos)")
 
