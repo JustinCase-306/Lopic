@@ -543,6 +543,7 @@ ul.feat li::marker { color: var(--c1); }
   bottom: 0;
   margin: 24px -22px -22px;
   display: flex;
+  flex-wrap: wrap;
   gap: 9px;
   padding: 14px 22px 18px;
   background: var(--panel-solid);

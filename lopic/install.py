@@ -147,7 +147,8 @@ class Installer:
 
     # ---------- install ----------
 
-    def start(self, gen: dict) -> None:
+    def start(self, gen: dict, force: bool = False) -> None:
+        """force skips the "source is already a checkout" shortcut and rebuilds it."""
         with self._lock:
             if self.current is not None:
                 self.emit("FEHLER Es laeuft bereits eine Installation. Bitte warte sie ab.")
@@ -157,10 +158,10 @@ class Installer:
         job = Job(id=gen["id"], status="running")
         self.jobs[job.id] = job
         self._push(job)
-        threading.Thread(target=self._install_worker, args=(gen, job),
+        threading.Thread(target=self._install_worker, args=(gen, job, force),
                          daemon=True, name=f"lopic-install-{gen['id']}").start()
 
-    def _install_worker(self, gen: dict, job: Job) -> None:
+    def _install_worker(self, gen: dict, job: Job, force: bool = False) -> None:
         try:
             self.root.mkdir(parents=True, exist_ok=True)
             target = self.root / gen["folder"]
@@ -170,7 +171,11 @@ class Installer:
             # a bare .git directory is not a checkout: a half-removed tree can
             # leave one behind and then `git pull` fails with "not a git
             # repository". verify it actually is one before trusting it.
-            if self._is_checkout(target):
+            if force:
+                self.log(f">>> {gen['name']}: Neuinstallation, Quelle wird neu geklont")
+                if not self._replace_source(job, gen, self.root, target):
+                    raise RuntimeError("clone fehlgeschlagen")
+            elif self._is_checkout(target):
                 self.log(f"OK Quelle von {gen['name']} ist schon da")
                 if not self._run(job, ["git", "pull", "--ff-only"], target,
                                  f"{gen['name']}: git pull"):
@@ -257,6 +262,50 @@ class Installer:
             with self._lock:
                 self.current = None
 
+    # a package whose files were deleted keeps its `<name>-<version>.dist-info/`
+    # directory, and pip treats dist-info as proof enough: re-running
+    # requirements reports "already satisfied" and never puts the files back.
+    # the RECORD file inside dist-info lists every installed path, so the holes
+    # can be found without guessing which package broke.
+    _RECORD_PROBE = (
+        "import importlib.metadata as md\n"
+        "bad = []\n"
+        "for d in md.distributions():\n"
+        "    try:\n"
+        "        files = list(d.files or [])\n"
+        "    except Exception:\n"
+        "        continue\n"
+        "    for f in files:\n"
+        "        if not str(f).endswith('.py'):\n"
+        "            continue\n"
+        "        try:\n"
+        "            if not d.locate_file(f).exists():\n"
+        "                bad.append('%s==%s' % (d.metadata['Name'], d.version))\n"
+        "                break\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "print('\\n'.join(sorted(set(bad))))\n"
+    )
+
+    def _damaged_packages(self, target: Path, py: str) -> list[str]:
+        """installed distributions whose .py files are missing from disk."""
+        r = self._capture([py, "-c", self._RECORD_PROBE], target, timeout=300)
+        if r.returncode != 0:
+            return []
+        return [line.strip() for line in (r.stdout or "").splitlines() if line.strip()]
+
+    def _repair_packages(self, job: Job, gen: dict, target: Path, py: str) -> bool:
+        """force-reinstall whatever the RECORD check flagged."""
+        damaged = self._damaged_packages(target, py)
+        if not damaged:
+            self.log(f">>> {gen['name']}: keine beschaedigten Pakete gefunden")
+            return True
+        self.log(f">>> {gen['name']}: beschaedigt -> {', '.join(damaged)}")
+        return self._run(job,
+                         [py, "-m", "pip", "install", "--force-reinstall",
+                          "--no-deps", *damaged],
+                         target, f"{gen['name']}: beschaedigte Pakete reparieren")
+
     def _verify_env(self, job: Job, gen: dict, target: Path, py: str) -> bool:
         """confirm the venv imports, and repair a broken dependency set.
 
@@ -280,6 +329,7 @@ class Installer:
             self.log(f">>> {gen['name']}: Importpruefung fehlgeschlagen "
                      f"({'; '.join(tail)[:180]})")
             if attempt == 1:
+                self._repair_packages(job, gen, target, py)
                 self.log(f">>> {gen['name']}: Abhaengigkeiten neu installieren")
                 self._install_deps(job, gen, target, py)
         self.log(f"FEHLER {gen['name']}: Umgebung bleibt unbrauchbar")
@@ -387,10 +437,11 @@ class Installer:
 
         `git clone` refuses any non-empty destination (not just a non-empty
         .git), so the keeper directories have to move out, and back in after.
-        they are the hand-cloned helper repos and the venv -- 9 GB and hours of
-        work that a plain rmtree here throws away.
+        they are the hand-cloned helper repos, the venv and the prebuilt wheels --
+        ~9 GB and hours of work that a plain rmtree here throws away. the wheels
+        are built from the engine's github zips, so they survive a re-clone.
         """
-        keep = {"repositories", "venv"}
+        keep = {"repositories", "venv", "_lopic_wheels"}
         stash = Path(tempfile.mkdtemp(prefix="lopic-stash-", dir=str(root)))
         moved: set[str] = set()
         try:

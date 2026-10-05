@@ -284,6 +284,7 @@ function renderDetail(id) {
           ? `<button class="btn primary" onclick="callApi('launch', '${g.id}')">Starten</button>
              <button class="btn" onclick="callApi('stop', '${g.id}')">Stoppen</button>
              <button class="btn" onclick="callApi('open_folder', '${g.id}')" title="Ordner im Explorer öffnen">Ordner</button>
+             <button class="btn" onclick="callApi('reinstall', '${g.id}')" title="Quellcode neu klonen und beschädigte Pakete reparieren">Neu installieren</button>
              <button class="btn danger" onclick="callApi('uninstall', '${g.id}')">Entfernen</button>`
           : busy
             ? `<button class="btn primary" disabled>Installation laeuft &hellip; ${Math.round((job.progress||0)*100)}%</button>`

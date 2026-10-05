@@ -163,6 +163,14 @@ class LopicApi:
         self.installer.start(gen)
         return {"ok": True}
 
+    def reinstall(self, gen_id: str) -> dict:
+        """rebuild a generator: fresh source tree, damaged packages repaired."""
+        gen = by_id(gen_id)
+        if gen is None:
+            return {"ok": False, "error": "unbekannter generator"}
+        self.installer.start(gen, force=True)
+        return {"ok": True}
+
     def launch(self, gen_id: str) -> dict:
         gen = by_id(gen_id)
         if gen is None:
