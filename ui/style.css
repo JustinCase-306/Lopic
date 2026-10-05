@@ -531,14 +531,21 @@ ul.feat { margin: 0; padding-left: 17px; display: flex; flex-direction: column; 
 ul.feat li { font-size: 12.5px; color: var(--muted); }
 ul.feat li::marker { color: var(--c1); }
 
-/* The action bar is the last element of the panel. `position: sticky` with a
-   negative bottom offset made it float over the middle of the content, so it
-   is a normal flow element pinned to the end of the scroll area instead. */
+/* The panel is a scroll container and its content is ~950px tall on a 840px
+   window, so the action bar used to live below the fold: "Starten" was only
+   reachable after scrolling an almost invisible scrollbar. `position: sticky`
+   pins it to the bottom of the scrollport instead. The offsets are `bottom: 0`
+   with a negative bottom *margin* to cancel the panel's 22px padding -- an
+   earlier attempt used a negative bottom *offset* and floated the bar over the
+   middle of the content, which is not what sticky means here. */
 .actions {
-  margin-top: 24px;
+  position: sticky;
+  bottom: 0;
+  margin: 24px -22px -22px;
   display: flex;
   gap: 9px;
-  padding-top: 4px;
+  padding: 14px 22px 18px;
+  background: var(--panel-solid);
   border-top: 1px solid var(--stroke);
 }
 .btn {
