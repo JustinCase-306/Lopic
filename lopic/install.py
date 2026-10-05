@@ -37,10 +37,12 @@ class Installer:
     """one install at a time keeps the gpu and disk honest."""
 
     def __init__(self, root: Path, emit: Callable[[str], None],
-                 emit_state: Callable[[dict], None]):
+                 emit_state: Callable[[dict], None],
+                 log_dir: Path | None = None):
         self.root = Path(root)
         self.emit = emit
         self.emit_state = emit_state
+        self.log_dir = Path(log_dir) if log_dir else self.root / "logs"
         self.jobs: dict[str, Job] = {}
         self.current: str | None = None
         self._lock = threading.Lock()
@@ -393,6 +395,10 @@ class Installer:
 
     def _spawn(self, gen: dict, cmd: list[str], cwd: Path,
                env_extra: dict | None = None) -> None:
+        """start a generator and keep its output (see _pump_output).
+
+        stdout/stderr used to go to DEVNULL, which made a crash invisible.
+        """
         env = self._run_env()
         if env_extra:
             env.update(env_extra)
@@ -409,18 +415,55 @@ class Installer:
                 cwd=str(cwd),
                 env=env,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 creationflags=CREATE_NO_WINDOW,
                 startupinfo=info,
+                bufsize=1,
             )
         except OSError as exc:
             self.emit(f"FEHLER Start fehlgeschlagen: {exc}")
             return
         self._launched[gen["id"]] = proc
+        threading.Thread(target=self._pump_output, args=(gen, proc), daemon=True,
+                         name=f"lopic-log-{gen['id']}").start()
+
+    def _pump_output(self, gen: dict, proc: subprocess.Popen) -> None:
+        """stream a running generator's output to the log pane and to disk."""
+        log_path = self.log_dir / f"{gen['id']}.log"
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            handle = log_path.open("w", encoding="utf-8", errors="replace")
+        except OSError:
+            handle = None
+
+        def write(text: str) -> None:
+            """mirror to disk; the log file is a convenience, never fatal."""
+            if handle:
+                handle.write(text + "\n")
+                handle.flush()
+            self.emit(text)
+
+        try:
+            write(f"=== {gen['name']} gestartet ===")
+            for line in proc.stdout or []:
+                if text := line.rstrip():
+                    write(text)
+            code = proc.wait()
+            write(f"=== {gen['name']} beendet (Code {code}) ===")
+            if code:
+                self.emit(f"FEHLER {gen['name']} endete mit Code {code}. "
+                          f"Log: {log_path}")
+        finally:
+            if handle:
+                handle.close()
+            self._launched.pop(gen["id"], None)
 
     def stop(self, gen_id: str) -> None:
-        proc = self._launched.pop(gen_id, None)
+        proc = self._launched.get(gen_id)
         if proc and proc.poll() is None:
             proc.terminate()
             self.emit(f"OK {gen_id} gestoppt")
