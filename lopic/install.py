@@ -200,6 +200,14 @@ class Installer:
             self._run(job, [py, "-m", "pip", "install", "--upgrade", "pip", "wheel"],
                       target, f"{gen['name']}: pip aktualisieren")
 
+            # pin numpy before torch (see _pinned_packages): torch takes any numpy, and
+            # installing the pin afterwards means a downgrade mid-run
+            pinned = self._pinned_packages(gen, target)
+            if pinned:
+                self.log(f">>> {gen['name']}: pinne {', '.join(pinned)}")
+                self._run(job, [py, "-m", "pip", "install", *pinned],
+                          target, f"{gen['name']}: Pakete pinnen")
+
             torch_idx = gen.get("torch_index")
             if torch_idx:
                 self.log(f">>> torch fuer deine GPU (Index: {torch_idx}) — grosser Download")
@@ -304,6 +312,27 @@ class Installer:
                 return False
         return True
 
+    def _pinned_packages(self, gen: dict, target: Path) -> list[str]:
+        """read the strict pins from the generator's requirements file.
+
+        only strict `==` pins, and only ones torch would otherwise override
+        (numpy is the case that matters). a bare package name is skipped: there
+        is nothing to pre-install.
+        """
+        req = target / (gen.get("requirements") or "")
+        if not req.is_file():
+            return []
+        names = ("numpy",)
+        pins: list[str] = []
+        for line in req.read_text("utf-8", errors="replace").splitlines():
+            line = line.split("#", 1)[0].strip()
+            if "==" not in line:
+                continue
+            name = line.split("==", 1)[0].strip().lower()
+            if name in names:
+                pins.append(line.replace(" ", ""))
+        return pins
+
     def _install_deps(self, job: Job, gen: dict, target: Path, py: str) -> bool:
         """install either a requirements file or a pip package.
 
@@ -316,12 +345,7 @@ class Installer:
         if req_name:
             req = target / req_name
             if req.exists():
-                # only-if-needed: a pin older than what torch just installed
-                # (forge numpy==1.26.2 vs torch's 2.x) must not trigger an
-                # uninstall, that one left numpy half applied
-                return self._run(job, [py, "-m", "pip", "install",
-                                       "--upgrade-strategy", "only-if-needed",
-                                       "-r", str(req)],
+                return self._run(job, [py, "-m", "pip", "install", "-r", str(req)],
                                  target, f"{gen['name']}: Abhaengigkeiten")
             self.log(f"FEHLER {req_name} nicht gefunden im Repository")
             return False
