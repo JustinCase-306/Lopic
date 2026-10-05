@@ -165,13 +165,17 @@ class Installer:
             venv_dir = target / "venv"
 
             # -- phase 1: source --
-            if (target / ".git").exists():
+            # a bare .git directory is not a checkout: a half-removed tree can
+            # leave one behind and then `git pull` fails with "not a git
+            # repository". verify it actually is one before trusting it.
+            if self._is_checkout(target):
                 self.log(f"OK Quelle von {gen['name']} ist schon da")
                 if not self._run(job, ["git", "pull", "--ff-only"], target,
                                  f"{gen['name']}: git pull"):
                     self.log("HINWEIS Update fehlgeschlagen, vorhandene Version bleibt")
             else:
                 if target.exists():
+                    self.log(f">>> {gen['name']}: unvollstaendige Installation wird ersetzt")
                     shutil.rmtree(target, ignore_errors=True)
                 if not self._run(job, ["git", "clone", "--depth", "1", gen["repo"], str(target)],
                                  self.root, f"{gen['name']}: git clone"):
@@ -315,6 +319,21 @@ class Installer:
         return True
 
     @staticmethod
+    def _is_checkout(target: Path) -> bool:
+        """true when target holds a real git checkout, not just a .git dir.
+
+        an interrupted delete can leave .git behind while the worktree is
+        gone; `git pull` then dies with "not a git repository" and the run
+        continues as if the source were fine.
+        """
+        dotgit = target / ".git"
+        if not dotgit.is_dir() or not any(dotgit.iterdir()):
+            return False
+        r = subprocess.run(["git", "-C", str(target), "rev-parse", "--is-inside-work-tree"],
+                           capture_output=True, text=True, timeout=60,
+                           creationflags=CREATE_NO_WINDOW)
+        return r.returncode == 0 and r.stdout.strip() == "true"
+
     def _pinned_packages(gen: dict, target: Path) -> list[str]:
         """read the engine's strict pins from its requirements file.
 
